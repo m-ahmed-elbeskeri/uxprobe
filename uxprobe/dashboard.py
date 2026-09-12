@@ -12,6 +12,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import re
 from typing import Any
 
 from .analysis import (
@@ -102,10 +103,13 @@ ICON_OUT = _sicon('<path d="M7 17L17 7M9 7h8v8"/>')
 ICON_DOC = _sicon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>')
 
 # A bespoke wordmark: a probe crosshair, drawn white on the accent tile.
-LOGO_MARK = ('<svg class="logo" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" '
+LOGO_MARK = ('<svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" '
              'stroke-linecap="round"><circle cx="12" cy="12" r="6.4"/>'
              '<path d="M12 1.7v3.2M12 19.1v3.2M1.7 12h3.2M19.1 12h3.2"/>'
-             '<circle cx="12" cy="12" r="1.7" fill="#fff" stroke="none"/></svg>')
+             '<circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/></svg>')
+ICON_CUBE = _sicon('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12L4 7.5M12 12v9"/>')
+ICON_MAP = _sicon('<path d="M4 6h16M4 12h16M4 18h16"/><path d="M9 3v18M15 3v18" opacity=".5"/>')
+ICON_NOSHOT = _sicon('<path d="M4 4l16 16"/><path d="M9.5 5h5l1.5 2H20a1 1 0 0 1 1 1v9.5"/><path d="M4 7.5V18a1 1 0 0 0 1 1h12.5"/><circle cx="12" cy="13" r="3.5"/>')
 
 # One Phosphor glyph per persona, so each participant reads at a glance.
 _PERSONA_GLYPHS = {
@@ -127,8 +131,37 @@ def persona_icon(persona) -> str:
     return _PERSONA_GLYPHS.get(persona.id, _PERSONA_GLYPHS["_default"])
 
 
+# One small shape per severity and one mark per outcome, so state never rests on a dot.
+_SEV_SHAPE = {
+    "blocker": '<path d="M5.2 1.5h5.6l4 4v5.6l-4 4H5.2l-4-4V5.5z"/><rect x="3.6" y="7" width="8.8" height="2" style="fill:var(--bg)"/>',
+    "major": '<path d="M8 1.8l7 12.4H1z"/>',
+    "minor": '<path d="M8 1.2l6.8 6.8L8 14.8 1.2 8z"/>',
+    "nitpick": '<rect x="3" y="3" width="10" height="10" rx="1.5"/>',
+}
+_OUT_SHAPE = {
+    "completed": '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.7"/>'
+                 '<path d="M5 8.2l2 2 4-4.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+    "partial": '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.7"/>'
+               '<path d="M8 1.7a6.3 6.3 0 0 0 0 12.6z"/>',
+    "abandoned": '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.7"/>'
+                 '<path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    "unknown": '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-dasharray="2.2 2.2"/>',
+}
+_OUT_SHAPE["failed"] = _OUT_SHAPE["abandoned"]
+
+
+def sev_glyph(sev: str, cls: str = "g") -> str:
+    shape = _SEV_SHAPE.get(sev, _SEV_SHAPE["nitpick"])
+    return f'<svg class="{cls} {sev}" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">{shape}</svg>'
+
+
+def out_glyph(outcome: str, cls: str = "st") -> str:
+    shape = _OUT_SHAPE.get(outcome, _OUT_SHAPE["unknown"])
+    return f'<svg class="{cls} {outcome}" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><title>{outcome}</title>{shape}</svg>'
+
+
 def _pill(sev: str) -> str:
-    return f'<span class="pill {sev}">{sev}</span>'
+    return f'<span class="pill {sev}">{sev_glyph(sev)}{sev}</span>'
 
 
 # --------------------------------------------------------------------------
@@ -147,7 +180,7 @@ def render_session_html(result: RunResult, esc=html.escape) -> str:
     a = out.append
 
     a(f'<h2>{esc(persona.name)} <span class="arrow">&rarr;</span> {esc(task.title)}</h2>')
-    chips = [f'<span class="badge {esc(outcome)}"><span class="st"></span>{esc(outcome)}</span>',
+    chips = [f'<span class="badge {esc(outcome)}">{out_glyph(esc(outcome))}{esc(outcome)}</span>',
              f'<span class="chip">difficulty {esc(_fmt(report.get("difficulty")))}/5</span>',
              f'<span class="chip">ease {esc(_fmt(report.get("ease_score")))}/100</span>',
              f'<span class="chip">{esc(spec.agent)}</span>',
@@ -247,15 +280,102 @@ _HEAD = """<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>uxprobe · __TITLE__</title>
 <script>try{document.documentElement.className="js";var t=localStorage.getItem("uxprobe-theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}</script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>__CSS__</style></head><body>
 """
 
 _OUTCOME_ORDER = ["completed", "partial", "abandoned", "failed", "unknown"]
 _OUTCOME_WORD = {"completed": "finished", "partial": "got part of the way", "abandoned": "gave up",
                  "failed": "failed", "unknown": "unclear"}
+
+
+_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+          "eleven", "twelve"]
+
+
+def _words(n: int) -> str:
+    return _WORDS[n] if 0 <= n < len(_WORDS) else str(n)
+
+
+def _gauge(ease: Any, esc=html.escape) -> str:
+    """A small ring gauge for the participant's own ease score."""
+    if ease is None or ease == "":
+        return '<span class="gauge na" title="no ease score">n/a</span>'
+    try:
+        pct = max(0, min(100, int(ease)))
+    except (TypeError, ValueError):
+        pct = 0
+    circ = 2 * 3.14159 * 15.5
+    off = circ * (1 - pct / 100)
+    return (f'<span class="gauge {_ease_class(ease)}" title="ease {pct}/100, the participant&#39;s own score">'
+            f'<svg viewBox="0 0 36 36"><circle class="tr" cx="18" cy="18" r="15.5"/>'
+            f'<circle class="fl" cx="18" cy="18" r="15.5" stroke-dasharray="{circ:.2f}" stroke-dashoffset="{off:.2f}"/></svg>'
+            f'{esc(_fmt(ease))}</span>')
+
+
+_GRADE_BARS = {MEASURED: 3, OBSERVED: 2, IMPRESSION: 1}
+
+
+def _sig(grade: str) -> str:
+    return f'<span class="sig s{_GRADE_BARS.get(grade, 1)}"><i></i><i></i><i></i></span>'
+
+
+def _stamp(outcome: str, esc=html.escape) -> str:
+    return f'<span class="stamp {esc(outcome)}">{esc(outcome)}</span>'
+
+
+def _smooth(points: list[tuple[float, float]]) -> str:
+    """Catmull-Rom through the points as cubic Beziers; a hand-drawn feel."""
+    if len(points) < 2:
+        return ""
+    d = [f"M{points[0][0]:.1f},{points[0][1]:.1f}"]
+    for i in range(len(points) - 1):
+        p0 = points[i - 1] if i > 0 else points[i]
+        p1, p2 = points[i], points[i + 1]
+        p3 = points[i + 2] if i + 2 < len(points) else p2
+        c1 = (p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6)
+        c2 = (p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6)
+        d.append(f"C{c1[0]:.1f},{c1[1]:.1f} {c2[0]:.1f},{c2[1]:.1f} {p2[0]:.1f},{p2[1]:.1f}")
+    return " ".join(d)
+
+
+def _fingerprint(sessions: list[dict], max_steps: int) -> str:
+    """Every participant's friction as stacked ridgelines: the study's signature."""
+    rows = [s for s in sessions if s["steps"]]
+    if not rows or max_steps < 2:
+        return ""
+    W, pad, gap, amp = 320.0, 12.0, 24.0, 30.0
+    H = pad * 2 + amp + gap * (len(rows) - 1) + 8
+    paths, peak = [], None
+    for r, s_ in enumerate(reversed(rows)):  # back to front so the front row occludes
+        base = pad + amp + r * gap
+        pts = [(pad + i * (W - 2 * pad) / max(1, max_steps - 1), base - st["friction"] * (amp / 3))
+               for i, st in enumerate(s_["steps"])]
+        line = _smooth(pts)
+        area = f"{line} L{pts[-1][0]:.1f},{base + 4:.1f} L{pts[0][0]:.1f},{base + 4:.1f} Z"
+        paths.append(f'<path class="a{" fl" if r % 2 else ""}" d="{area}"/><path class="r" d="{line}"/>')
+        for x, y in pts:
+            if peak is None or y < peak[1]:
+                peak = (x, y)
+    dot = f'<circle class="peak" cx="{peak[0]:.1f}" cy="{peak[1]:.1f}" r="4"/>' if peak else ""
+    return (f'<figure class="fp"><svg viewBox="0 0 {W:.0f} {H:.0f}" aria-hidden="true">{"".join(paths)}{dot}</svg>'
+            f'<figcaption><span>Friction, every step, every participant</span>'
+            f'<span><b>{len(rows)}</b> lines &middot; <b>{max_steps}</b> steps</span></figcaption></figure>')
+
+
+_MOOD = {"confident": "up", "delighted": "up", "relieved": "up", "surprised": "up", "curious": "up",
+         "neutral": "", "bored": "", "confused": "mid", "lost": "mid", "unsure": "mid",
+         "annoyed": "down", "impatient": "down", "anxious": "down", "frustrated": "bad", "angry": "bad"}
+
+
+def _mood(steps: list[dict]) -> str:
+    if not steps:
+        return ""
+    cells = []
+    for st in steps:
+        key = (st.get("feeling") or "").strip().lower().split(",")[0].split("/")[0].strip()
+        cells.append(f'<i class="{_MOOD.get(key, "")}" title="{html.escape(st.get("feeling") or "")}"></i>')
+    return (f'<div class="mood" title="how they felt, step by step">{"".join(cells)}</div>'
+            '<div class="mood-lbl"><span>start</span><span>end</span></div>')
 
 
 def _ease_class(ease: Any) -> str:
@@ -326,7 +446,7 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
         return f'<span class="ava {cls}" title="{esc(persona.name)}">{persona_icon(persona)}</span>'
 
     def outcome_badge(outcome: str) -> str:
-        return f'<span class="badge {esc(outcome)}"><span class="st"></span>{esc(outcome)}</span>'
+        return f'<span class="badge {esc(outcome)}">{out_glyph(esc(outcome))}{esc(outcome)}</span>'
 
     persona_by_name = {}
     for r in results:
@@ -336,7 +456,7 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
         sev = group["severity"]
         tags = [
             f'<span class="tag">hit by {group["reach"]}/{group["total_personas"]}</span>',
-            f'<span class="tag grade-{group["grade"]}">{group["grade"]}</span>',
+            f'<span class="tag grade-{group["grade"]}">{_sig(group["grade"])}{group["grade"]}</span>',
             f'<span class="tag">impact {group["impact"]:.0f}</span>',
         ]
         if group["universal"]:
@@ -348,7 +468,7 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
         who = "".join(
             f'<span class="ava" title="{esc(name)}: {esc(rating)}">'
             f'{persona_icon(persona_by_name[name]) if name in persona_by_name else _PERSONA_GLYPHS["_default"]}'
-            f'<i class="{esc(rating)}"></i></span>'
+            f'{sev_glyph(esc(rating), "g mini")}</span>'
             for name, rating in group["by_persona"].items()
         )
         pids = " ".join(sorted({persona_by_name[n].id for n in group["personas"] if n in persona_by_name}))
@@ -380,7 +500,10 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
         total = sum(c for _, c, _ in pairs) or 1
         segs = "".join(f'<i class="{cls}" style="width:{c / total * 100:.4f}%"></i>'
                        for cls, c, _ in pairs if c)
-        leg = "".join(f'<span><i class="{cls}"></i><b>{c}</b> {esc(lbl)}</span>'
+        def glyph(cls: str) -> str:
+            kind, _, key = cls.partition("-")
+            return sev_glyph(key) if kind == "sev" else out_glyph(key, "st")
+        leg = "".join(f'<span>{glyph(cls)}<b>{c}</b> {esc(lbl)}</span>'
                       for cls, c, lbl in pairs if c)
         return f'<div class="dist">{segs}</div><div class="lg">{leg}</div>'
 
@@ -432,7 +555,7 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
         for s in sessions:
             add(f'<a class="pp" href="#replay/{s["i"]}/0" data-replay="{s["i"]}:0" title="Replay {esc(s["name"])}">'
                 f'<span class="ava">{s["icon"]}</span><span class="nm">{esc(s["first"])}</span>'
-                f'<span class="st {esc(s["outcome"])}" title="{esc(s["outcome"])}"></span></a>')
+                f'{out_glyph(esc(s["outcome"]))}</a>')
         add("</nav>")
     add('<div class="foot"><div class="name">' + esc(study_name) + "</div>"
         f'<div class="row"><span>Run</span><span>{esc(meta.get("started_at", "")[:10])}</span></div>'
@@ -467,73 +590,99 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
 
     # ---- Overview -----------------------------------------------------------
     top = groups[0] if groups else None
-    lead = (f'<span class="num">{len(results)}</span> simulated participant{"s" if len(results) != 1 else ""} '
-            f'took <span class="num">{total_steps}</span> steps and <span class="num">{total_shots}</span> screenshots '
-            f'in <span class="num">{stats["minutes"]}</span> minutes of agent time. ')
+    verdict = ""
     if results:
-        lead += f'<b>{completed} of {n_sessions}</b> finished the task. '
+        verdict = f'<span class="lead">{_words(completed).capitalize()} of {_words(n_sessions)} finished the task.</span>'
     if top:
-        lead += f'Top of the list: <span class="fr">{esc(top["what"])}</span>'
-    add('<section class="view" id="overview"><div class="vhead"><div>'
-        '<div class="eyebrow"><i></i>Study &middot; ' + esc(meta.get("started_at", "")[:10]) + "</div>"
-        "<h1>Overview</h1>"
-        f'<p class="lead">{lead}</p></div>'
-        '<div class="right"><a class="abtn pri" data-view="replay" href="#replay">' + ICON_PLAY + " Watch the sessions</a></div></div>")
-    add('<div class="kpis">')
-    add(f'<div class="kpi"><div class="k">Fix first</div>'
-        f'<div class="v blocker" data-count="{stats["fix_first"]}">{stats["fix_first"]}</div>'
+        what = top["what"].strip()
+        if len(what) > 140:  # keep it to a line or two; the full text is one click away
+            first = re.split(r"(?<=[.!?])\s", what, maxsplit=1)[0]
+            what = first if len(first) <= 180 else first[:170].rsplit(" ", 1)[0] + "\u2026"
+        if what and what[-1] not in ".!?\u2026":
+            what += "."
+        verdict += (f'<span class="top">{_pill(top["severity"])}Top of the list: <em>{esc(what)}</em> '
+                    f'<a class="tx" data-view="issues" href="#issues">See all {len(groups)}</a></span>')
+    meta_bits = [f'Study &middot; {esc(meta.get("started_at", "")[:10])}',
+                 f'<b>{len(results)}</b> participant{"s" if len(results) != 1 else ""}',
+                 f'<b>{total_steps}</b> steps', f'<b>{total_shots}</b> screenshots',
+                 f'<b>{stats["minutes"]}</b> min of agent time']
+    add('<span class="anchor" id="overview"></span><section class="view" id="v-overview" data-name="overview"><header class="hero">'
+        '<div class="eyebrow">' + " &middot; ".join(meta_bits) +
+        '<span class="right"><a class="abtn pri" data-view="replay" href="#replay">' + ICON_PLAY + " Watch the sessions</a></span></div>"
+        f'<div class="hero-grid"><div class="vlabel">Overview</div><h1 class="verdict">{verdict or "No sessions produced a report."}</h1>'
+        + _fingerprint(sessions, max_steps) + "</div>")
+    add('<div class="readouts">')
+    add(f'<div class="ro"><div class="k">Fix first</div><div class="v blocker" data-count="{stats["fix_first"]}">{stats["fix_first"]}</div>'
         f'<div class="note">blockers and agreed-on pain</div></div>')
-    add(f'<div class="kpi"><div class="k">Completed</div>'
-        f'<div class="v ok"><span data-count="{completed}">{completed}</span>'
-        f'<small>/{n_sessions}</small></div>'
-        f'<div class="note">tasks finished</div></div>')
-    add(f'<div class="kpi"><div class="k">Issues</div>'
-        f'<div class="v" data-count="{stats["issues"]}">{stats["issues"]}</div>'
+    add(f'<div class="ro"><div class="k">Completed</div><div class="v ok"><span data-count="{completed}">{completed}</span>'
+        f'<small>/{n_sessions}</small></div><div class="note">tasks finished</div></div>')
+    add(f'<div class="ro"><div class="k">Issues</div><div class="v" data-count="{stats["issues"]}">{stats["issues"]}</div>'
         f'<div class="note">merged from {stats["raw_findings"]} raw findings</div></div>')
-    add(f'<div class="kpi"><div class="k">Measured</div>'
-        f'<div class="v accent" data-count="{stats["measured"]}">{stats["measured"]}</div>'
+    add(f'<div class="ro"><div class="k">Measured</div><div class="v" data-count="{stats["measured"]}">{stats["measured"]}</div>'
         f'<div class="note">checked in the page, not felt</div></div>')
-    add(f'<div class="kpi"><div class="k">Hit everyone</div>'
-        f'<div class="v" data-count="{stats["universal"]}">{stats["universal"]}</div>'
+    add(f'<div class="ro"><div class="k">Hit everyone</div><div class="v" data-count="{stats["universal"]}">{stats["universal"]}</div>'
         f'<div class="note">issues every persona met</div></div>')
-    add("</div>")
+    add("</div></header>")
 
-    # journey map
+    # journey: a 3D friction landscape (CSS transforms, no dependencies) and the flat map
     if with_steps:
-        add('<div class="panel"><div class="ph"><h3>Journey map</h3>'
-            '<span class="sub">friction at every step, one row per participant</span>'
-            '<span class="right">hover a step for the thought, click to replay it</span></div><div class="pb">')
+        rows = len(sessions)
+        u = max(12, min(28, 880 // max(1, max_steps)))
+        pitch = round(u * 2.1)
+        heights = {0: 3, 1: max(14, round(u * .8)), 2: max(28, round(u * 1.6)), 3: max(42, round(u * 2.4))}
+        land_h = min(480, 220 + rows * 52)
+        add('<div class="panel jpanel" data-mode="land"><div class="ph"><h3>Friction landscape</h3>'
+            '<span class="sub">one bar per step, taller is worse, one row per participant</span>'
+            '<span class="right"><span class="seg" role="tablist">'
+            f'<button type="button" class="on" data-mode="land">{ICON_CUBE}3D</button>'
+            f'<button type="button" data-mode="map">{ICON_MAP}Map</button></span></span></div>')
+        add(f'<div class="land" style="--u:{u}px;--pitch:{pitch}px;--rows:{rows};--land-h:{land_h}px">'
+            f'<div class="stage" style="width:{max_steps * u}px;height:{rows * pitch}px">'
+            f'<div class="ground" style="width:{max_steps * u}px;height:{(rows - 1) * pitch + u}px"></div>')
+        k = 0
+        for s_ in sessions:
+            add(f'<div class="lab" style="--r:{s_["i"]}"><span>{out_glyph(esc(s_["outcome"]))}{esc(s_["first"])}</span></div>')
+            for c, st in enumerate(s_["steps"]):
+                add(f'<div class="bar fr{st["friction"]}{" shot" if st["shot"] else ""}" data-s="{s_["i"]}" data-i="{c}" '
+                    f'style="--r:{s_["i"]};--c:{c};--i:{k};--hh:{heights[st["friction"]]}px" title="{esc(s_["first"])}, step {st["n"]}">'
+                    '<i class="sh"></i><i class="t"></i><i class="s"></i><i class="n"></i><i class="e"></i><i class="w"></i></div>')
+                k += 1
+        every = 10 if max_steps > 30 else (5 if max_steps > 12 else 1)
+        for c in range(max_steps):
+            if c == 0 or (c + 1) % every == 0 or c == max_steps - 1:
+                add(f'<div class="tick" style="--c:{c}">{c + 1}</div>')
+        add('</div><div class="hint"><span><i></i>friction</span><span><i class="r"></i>stuck</span><span>drag to turn &middot; click a bar to replay</span></div></div>')
+        add('<div class="jm-wrap"><div class="pb">')
         add(f'<div class="jm" style="--n:{max_steps}"><div class="jm-head"><div>Participant</div>')
         ticks = []
-        every = 10 if max_steps > 30 else (5 if max_steps > 12 else 1)
-        for k in range(1, max_steps + 1):
-            left = f"{(k - 0.5) / max_steps * 100:.3f}%"
-            major = k == 1 or k % every == 0 or k == max_steps
+        for k2 in range(1, max_steps + 1):
+            left = f"{(k2 - 0.5) / max_steps * 100:.3f}%"
+            major = k2 == 1 or k2 % every == 0 or k2 == max_steps
             ticks.append(f'<i class="{"maj" if major else ""}" style="left:{left}"></i>')
             if major:
-                ticks.append(f'<b style="left:{left}">{k}</b>')
+                ticks.append(f'<b style="left:{left}">{k2}</b>')
         add(f'<div class="jm-axis">{"".join(ticks)}</div><div class="tl">Ease &middot; time</div></div>')
-        for s in sessions:
+        for s_ in sessions:
             add('<div class="jm-row">')
-            add(f'<div class="jm-who"><span class="ava">{s["icon"]}</span><span style="min-width:0">'
-                f'<div class="nm">{esc(s["first"])}</div><div class="sub"><span class="st {esc(s["outcome"])}" '
-                f'style="width:6px;height:6px;border-radius:99px;display:inline-block"></span>{esc(s["outcome"])} &middot; {esc(s["device"])}</div></span></div>')
-            if s["steps"]:
+            add(f'<div class="jm-who"><span class="ava">{s_["icon"]}</span><span style="min-width:0">'
+                f'<div class="nm">{esc(s_["first"])}</div><div class="sub">{out_glyph(esc(s_["outcome"]))}'
+                f'{esc(s_["outcome"])} &middot; {esc(s_["device"])}</div></span></div>')
+            if s_["steps"]:
                 cells = "".join(
                     f'<button class="jm-cell fr{st["friction"]}{" shot" if st["shot"] else ""}" type="button" '
-                    f'style="--i:{k}" data-s="{s["i"]}" data-i="{k}" aria-label="Step {st["n"]}: {esc(st["intent"] or st["action"])}"></button>'
-                    for k, st in enumerate(s["steps"]))
+                    f'style="--i:{k3}" data-s="{s_["i"]}" data-i="{k3}" aria-label="Step {st["n"]}: {esc(st["intent"] or st["action"])}"></button>'
+                    for k3, st in enumerate(s_["steps"]))
                 add(f'<div class="jm-strip">{cells}</div>')
             else:
-                add(f'<div class="jm-empty">no step log{": " + esc(s["error"][:60]) if s["error"] else ""}</div>')
-            add(f'<div class="jm-tail">{_meter(s["ease"])}<span class="dur">{_duration(s["duration"])}</span></div>')
+                add(f'<div class="jm-empty">no step log{": " + esc(s_["error"][:60]) if s_["error"] else ""}</div>')
+            add(f'<div class="jm-tail">{_gauge(s_["ease"])}<span class="dur">{_duration(s_["duration"])}</span></div>')
             add("</div>")
-        add("</div>")
+        add("</div></div></div>")
         add('<div class="jm-legend"><span><i></i>smooth</span><span><i class="fr1"></i>a snag</span>'
             '<span><i class="fr2"></i>real friction</span><span><i class="fr3"></i>stuck</span>'
-            '<span><i style="background:transparent;border:1px dashed var(--faint);position:relative"></i>dot = screenshot taken</span>'
-            '<span class="hint">ease is the participant\'s own 0 to 100 score</span></div>')
-        add("</div></div>")
+            '<span><i style="background:transparent;border:1px solid var(--faint)"></i>mark = screenshot taken</span>'
+            '<span class="hint">ease is the participant&#39;s own 0 to 100 score</span></div>')
+        add("</div>")
 
     add('<div class="grid2">')
     add('<div class="panel"><div class="ph"><h3>Outcomes</h3>'
@@ -559,9 +708,8 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
     if matrix_rows and len(personas_cols) > 1:
         add('<div class="panel"><div class="ph"><h3>Who hit what</h3>'
             '<span class="sub">each participant\'s own rating of the top issues</span>'
-            '<span class="right"><span class="lg" style="margin:0"><span><i class="sev-blocker"></i>blocker</span>'
-            '<span><i class="sev-major"></i>major</span><span><i class="sev-minor"></i>minor</span>'
-            '<span><i class="sev-nitpick"></i>nitpick</span></span></span></div><div class="scroll">')
+            '<span class="right"><span class="lg" style="margin:0">' + "".join(
+                f'<span>{sev_glyph(sv)}{sv}</span>' for sv in SEVERITIES) + '</span></span></div><div class="scroll">')
         add('<table class="mx"><thead><tr><th>Issue</th>')
         for p in personas_cols:
             add(f'<th class="p"><span class="ava">{persona_icon(p)}</span><span>{esc(_first_name(p.name))}</span></th>')
@@ -572,15 +720,16 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
             for p in personas_cols:
                 rating = g["by_persona"].get(p.name)
                 if rating:
-                    add(f'<td class="c"><i class="{esc(rating)}" title="{esc(_first_name(p.name))}: {esc(rating)}"></i></td>')
+                    add(f'<td class="c" title="{esc(_first_name(p.name))}: {esc(rating)}">{sev_glyph(esc(rating), "g")}</td>')
                 else:
-                    add('<td class="c"><i class="none"></i></td>')
+                    add('<td class="c"><svg class="g none" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
+                        '<circle cx="8" cy="8" r="4" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2 2"/></svg></td>')
             add(f'<td class="r">{g["impact"]:.0f}</td></tr>')
         add("</tbody></table></div>")
         rest = len(groups) - len(matrix_rows)
         if rest > 0:
             add(f'<div class="pb" style="padding-top:10px;color:var(--muted);font-size:.78rem">'
-                f'{rest} more in the <a data-view="issues" href="#issues">full list</a>.</div>')
+                f'{rest} more in the <a class="tx" data-view="issues" href="#issues">full list</a>.</div>')
         add("</div>")
 
     if groups:
@@ -588,14 +737,14 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
             '<span class="sub">highest impact first</span></div><div class="pb">')
         for group in groups[:3]:
             add(issue_card(group))
-        add('<p style="margin-top:12px"><a data-view="issues" href="#issues">'
+        add('<p style="margin-top:12px"><a class="tx" data-view="issues" href="#issues">'
             f'See all {len(groups)} issues &rarr;</a></p>')
         add("</div></div>")
     add("</section>")
 
     # ---- Sessions -----------------------------------------------------------
-    add('<section class="view" id="sessions"><div class="vhead"><div>'
-        '<div class="eyebrow"><i></i>Sessions</div>'
+    add('<span class="anchor" id="sessions"></span><section class="view" id="v-sessions" data-name="sessions"><div class="vhead"><div>'
+        '<div class="eyebrow">Sessions</div>'
         "<h1>Sessions</h1><p>One row per participant. &ldquo;Ease&rdquo; is the "
         "participant's own score and is a feeling, not a measurement; treat it as a "
         "hint, not a metric.</p></div></div>")
@@ -621,7 +770,7 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
             f'<td class="task">{esc(s["task"])}</td>'
             f'<td>{outcome_badge(s["outcome"])}</td>'
             f'<td class="num">{esc(_fmt(report.get("difficulty")))}</td>'
-            f"<td>{_meter(s['ease'])}</td>"
+            f"<td>{_gauge(s['ease'])}</td>"
             f'<td class="num">{block_cell}</td>'
             f'<td>{spark(s["steps"])}</td>'
             f'<td class="fixcell">{fix}</td>'
@@ -632,8 +781,8 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
     add("</tbody></table></div></div></section>")
 
     # ---- Replay -------------------------------------------------------------
-    add('<section class="view" id="replay"><div class="vhead"><div>'
-        '<div class="eyebrow"><i></i>Replay</div>'
+    add('<span class="anchor" id="replay"></span><section class="view" id="v-replay" data-name="replay"><div class="vhead"><div>'
+        '<div class="eyebrow">Replay</div>'
         "<h1>Watch the session</h1><p>Every step the participant took, with the screenshot they "
         "saw and what they were thinking at that moment. Play it through or scrub with the arrow keys.</p></div></div>")
     if with_steps:
@@ -643,12 +792,12 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
                 continue
             add(f'<button class="rp-tab" type="button" data-s="{s["i"]}">'
                 f'<span class="ava">{s["icon"]}</span>{esc(s["first"])}'
-                f'<span class="st {esc(s["outcome"])}" title="{esc(s["outcome"])}"></span>'
+                f'{out_glyph(esc(s["outcome"]))}'
                 f'<span class="num" style="color:var(--faint);font-size:.7rem">{len(s["steps"])}</span></button>')
         add("</div>")
         add('<div id="replay-app"><div class="rp">'
-            '<div class="rp-stage"><div class="rp-chrome"><i></i><i></i><i></i><span class="url"></span><span class="dev"></span></div>'
-            '<div class="rp-shot"></div>'
+            '<div class="rp-stage"><div class="rp-chrome"><span class="url"></span><span class="dev"></span></div>'
+            '<div class="rp-shot"><span class="vf tl"></span><span class="vf tr"></span><span class="vf bl"></span><span class="vf br"></span></div>'
             '<div class="rp-cap"><span class="act"></span><span class="fric"></span></div></div>'
             '<div class="rp-side"></div></div>'
             '<div class="rp-bar"><div class="rp-ctl">'
@@ -668,8 +817,8 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
     add("</section>")
 
     # ---- Issues -------------------------------------------------------------
-    add('<section class="view" id="issues"><div class="vhead"><div>'
-        '<div class="eyebrow"><i></i>Issues</div>'
+    add('<span class="anchor" id="issues"></span><section class="view" id="v-issues" data-name="issues"><div class="vhead"><div>'
+        '<div class="eyebrow">Issues</div>'
         "<h1>What to fix</h1><p>Duplicate reports of one problem are merged into a single "
         "issue. &ldquo;Hit by&rdquo; counts distinct participants; &ldquo;measured&rdquo; "
         "means it was checked in the page rather than felt. Hover an issue to copy it as a ticket.</p></div></div>")
@@ -679,10 +828,10 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
             f'<button class="chipb" type="button" data-filter="band" data-value="{esc(b)}">{lbl}</button>'
             for b, lbl in ((BAND_FIX_FIRST, "Fix first"), (BAND_NEXT, "Next"), (BAND_BACKLOG, "Backlog"))) + "</div>")
         add('<div class="grp">' + "".join(
-            f'<button class="chipb {s}" type="button" data-filter="sev" data-value="{s}"><i></i>{s}</button>'
+            f'<button class="chipb {s}" type="button" data-filter="sev" data-value="{s}">{sev_glyph(s)}{s}</button>'
             for s in SEVERITIES) + "</div>")
         add('<div class="grp">' + "".join(
-            f'<button class="chipb {g}" type="button" data-filter="grade" data-value="{g}" title="{esc(desc)}"><i></i>{g}</button>'
+            f'<button class="chipb {g}" type="button" data-filter="grade" data-value="{g}" title="{esc(desc)}">{_sig(g)}{g}</button>'
             for g, desc in ((MEASURED, "checked in the page"), (OBSERVED, "quoted from the screen"),
                             (IMPRESSION, "no evidence recorded"))) + "</div>")
         add('<div class="grp">' + "".join(
@@ -708,8 +857,8 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
 
     # ---- Gallery ------------------------------------------------------------
     if with_shots:
-        add('<section class="view" id="gallery"><div class="vhead"><div>'
-            '<div class="eyebrow"><i></i>Gallery</div>'
+        add('<span class="anchor" id="gallery"></span><section class="view" id="v-gallery" data-name="gallery"><div class="vhead"><div>'
+            '<div class="eyebrow">Gallery</div>'
             "<h1>Gallery</h1><p>Every participant screenshots each meaningful step, wired to "
             "the moment that produced it. Click a frame to open it full size.</p></div></div>")
         for s in with_shots:
@@ -731,8 +880,8 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
 
     # ---- Voices -------------------------------------------------------------
     if quotes or delights or impressions:
-        add('<section class="view" id="voices"><div class="vhead"><div>'
-            '<div class="eyebrow"><i></i>Voices</div>'
+        add('<span class="anchor" id="voices"></span><section class="view" id="v-voices" data-name="voices"><div class="vhead"><div>'
+            '<div class="eyebrow">Voices</div>'
             "<h1>Voices</h1><p>In-character summaries, emotional arcs and the things that genuinely worked. "
             "Useful colour, not evidence.</p></div></div>")
         if quotes:
@@ -740,9 +889,10 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
             for s in quotes:
                 rep = s["result"].report
                 add(f'<div class="quote"><p>{esc(rep["in_character_summary"])}</p>')
+                add(_mood(s["steps"]))
                 if rep.get("emotional_arc"):
                     add(f'<div class="arc"><b>Emotional arc</b>{esc(rep["emotional_arc"])}</div>')
-                add(f'<div class="cite"><span class="ava">{s["icon"]}</span>{esc(s["name"])}{outcome_badge(s["outcome"])}</div></div>')
+                add(f'<div class="cite"><span class="ava">{s["icon"]}</span>{esc(s["name"])}{_stamp(s["outcome"])}</div></div>')
             add("</div>")
         if impressions:
             add(f'<div class="band" style="margin-top:22px">First impressions <span class="count">{len(impressions)}</span>'
@@ -759,10 +909,10 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
             add("</ul>")
         add("</section>")
 
-    add('<div class="foot">These are simulated participants driven by a coding agent, not real '
+    add('<div class="foot"><span class="stamp">Simulated</span><span>These are simulated participants driven by a coding agent, not real '
         "users. Mechanical observations, like a control that does not respond, an unlabelled input "
         "or a console error, are reliable and worth acting on. Statements about how someone "
-        "feels are hypotheses to check with real people, not measurements.</div>")
+        "feels are hypotheses to check with real people, not measurements.</span></div>")
     add("</div></main></div>")
 
     # ---- hidden documents, overlays, data -----------------------------------
@@ -792,7 +942,8 @@ def render_index_html(results: list[RunResult], study_name: str, meta: dict[str,
         f'<button class="ibtn lb-close" type="button" aria-label="Close">{ICON_X}</button></div>'
         '<div class="lb-body"></div><div class="lb-foot"></div></div>')
     add('<div class="tip" id="tip" role="tooltip"></div><div class="toast" id="toast" role="status"></div>')
-    add(f'<template id="ic-left">{ICON_LEFT}</template><template id="ic-right">{ICON_RIGHT}</template>')
+    add(f'<template id="ic-left">{ICON_LEFT}</template><template id="ic-right">{ICON_RIGHT}</template>'
+        f'<template id="ic-noshot">{ICON_NOSHOT}</template>')
 
     payload = {"sessions": [{k: v for k, v in s.items() if k != "result"} for s in sessions]}
     blob = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")

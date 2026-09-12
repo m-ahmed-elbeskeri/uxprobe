@@ -60,13 +60,15 @@ uxprobe run --url https://yoursite.com \
 
 ## What you get
 
-Every study builds one self-contained HTML dashboard: no server, no build step, opens
-from disk. The overview leads with the headline numbers, then a **journey map** of every
-step each participant took, coloured by how much friction they hit, then a **who hit
-what** grid showing which participants met which issues and how badly each rated it.
+Every study builds one self-contained HTML dashboard: no server, no build step, no web
+fonts, opens from disk. The overview leads with the verdict and the headline numbers, a
+**fingerprint** of every participant's friction drawn as stacked lines, and a **3D friction
+landscape**: one bar per step, one row per participant, taller is worse. Drag it to turn
+it, click a bar to jump to that moment, or flip it to a flat map. Below that, a **who hit
+what** grid shows which participants met which issues and how badly each rated it.
 
 <p align="center">
-  <img src="docs/img/dashboard-overview.jpg" alt="uxprobe dashboard overview: headline tiles, a journey map with one row per participant and one cell per step coloured by friction, outcome and severity bars, and a who-hit-what matrix" width="100%">
+  <img src="docs/img/dashboard-overview.jpg" alt="uxprobe dashboard overview: the verdict, a fingerprint of every participant's friction, headline readouts, and a 3D friction landscape with one bar per step per participant" width="100%">
 </p>
 
 **Replay** any session like a video: the screenshot the participant saw at each step,
@@ -80,8 +82,9 @@ search box, and a one-click copy of any issue as a Markdown ticket.
   <img src="docs/img/dashboard-issues.jpg" alt="Issues view: a filter bar for band, severity, evidence and participant, over a ranked list of merged issues with reach, evidence grade and impact tags" width="49%">
 </p>
 
-The whole thing is keyboard-driven (press `?` for the list), has a light theme, prints
-cleanly, and degrades to a plain stacked report if JavaScript is off.
+The whole thing is keyboard-driven (press `?` for the list), follows your system's light
+or dark setting with a toggle, prints cleanly, and degrades to a plain stacked report if
+JavaScript is off.
 
 Each participant drives a **real browser in character** and screenshots every meaningful
 step, so the write-up shows what they actually saw, wired to the moment that produced it.

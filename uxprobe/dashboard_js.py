@@ -35,7 +35,8 @@ DASHBOARD_JS = r"""
   /* ---------------------------------------------------------------- views */
   var navs=$$(".nav a[data-view]");
   var views=$$(".view");
-  var ids=views.map(function(v){return v.id;});
+  var ids=views.map(function(v){return v.getAttribute("data-name");});
+  function viewEl(name){return views[ids.indexOf(name)]||null;}
   var seen={};
   function countUp(el){
     var target=parseFloat(el.getAttribute("data-count"));
@@ -48,21 +49,24 @@ DASHBOARD_JS = r"""
     requestAnimationFrame(step);
   }
   function enter(v){
-    if(seen[v.id]){return;}
-    seen[v.id]=true;
+    var key=v.getAttribute("data-name");
+    if(seen[key]){return;}
+    seen[key]=true;
     $$("[data-count]",v).forEach(countUp);
     requestAnimationFrame(function(){requestAnimationFrame(function(){
       $$(".dist",v).forEach(function(d){d.classList.add("in");});
       $$(".jm-strip",v).forEach(function(d){d.classList.add("in");});
+      $$(".land",v).forEach(function(l){l.classList.add("in");land.settle(l);});
+      $$(".fp",v).forEach(function(f){f.classList.add("in");});
     });});
   }
   var current="";
   function show(id,scroll){
     if(ids.indexOf(id)<0){id=ids[0]||"";}
     current=id;
-    views.forEach(function(v){v.classList.toggle("active",v.id===id);});
+    views.forEach(function(v){v.classList.toggle("active",v.getAttribute("data-name")===id);});
     navs.forEach(function(a){a.classList.toggle("active",a.getAttribute("data-view")===id);});
-    var v=document.getElementById(id);
+    var v=viewEl(id);
     if(v){enter(v);}
     if(scroll!==false){window.scrollTo(0,0);}
     if(id!=="replay"){replay.stop();}
@@ -140,7 +144,7 @@ DASHBOARD_JS = r"""
   });
 
   /* ---------------------------------------------------------------- issues: filter, search, sort */
-  var q=$("#q"),cards=$$("#issues .f"),fbar=$(".fbar"),countEl=$(".fbar .count"),sortSel=$("#sort");
+  var q=$("#q"),cards=$$("#v-issues .f"),fbar=$(".fbar"),countEl=$(".fbar .count"),sortSel=$("#sort");
   var filters={sev:{},grade:{},persona:{},band:{}};
   function active(kind){return Object.keys(filters[kind]).filter(function(k){return filters[kind][k];});}
   function applyFilters(){
@@ -157,7 +161,7 @@ DASHBOARD_JS = r"""
       if(ok&&term){ok=(c.getAttribute("data-text")||"").indexOf(term)>=0;}
       c.classList.toggle("hide",!ok);if(ok){shown++;}
     });
-    $$("#issues .band").forEach(function(b){
+    $$("#v-issues .band").forEach(function(b){
       var vis=false,n=b.nextElementSibling;
       while(n&&!n.classList.contains("band")){if(n.classList.contains("f")&&!n.classList.contains("hide")){vis=true;break;}n=n.nextElementSibling;}
       b.classList.toggle("hide",!vis);
@@ -183,7 +187,7 @@ DASHBOARD_JS = r"""
   function sortCards(){
     if(!sortSel){return;}
     var mode=sortSel.value;
-    var bands=$$("#issues .band");
+    var bands=$$("#v-issues .band");
     bands.forEach(function(b){
       var items=[],n=b.nextElementSibling;
       while(n&&!n.classList.contains("band")){if(n.classList.contains("f")){items.push(n);}n=n.nextElementSibling;}
@@ -227,6 +231,46 @@ DASHBOARD_JS = r"""
     tipHide();replay.go(+c.getAttribute("data-s"),+c.getAttribute("data-i"),true);
   });
 
+  /* ---------------------------------------------------------------- friction landscape */
+  var land=(function(){
+    var yaw=-32;
+    function setYaw(stage,v){yaw=Math.max(-85,Math.min(25,v));stage.style.setProperty("--yaw",yaw+"deg");}
+    function settle(l){
+      var stage=$(".stage",l);if(!stage||l.dataset.settled){return;}l.dataset.settled="1";
+      if(reduced){setYaw(stage,-32);return;}
+      var from=-62,to=-32,t0=null,dur=1500;
+      function step(ts){if(!t0){t0=ts;}var p=Math.min(1,(ts-t0)/dur);var e=1-Math.pow(1-p,3);
+        if(l.dataset.drag){return;}setYaw(stage,from+(to-from)*e);if(p<1){requestAnimationFrame(step);}}
+      requestAnimationFrame(step);
+    }
+    $$(".land").forEach(function(l){
+      var stage=$(".stage",l);if(!stage){return;}
+      var down=null,moved=false;
+      l.addEventListener("pointerdown",function(e){if(e.button!==0){return;}down={x:e.clientX,y:yaw,bar:e.target.closest(".bar")};moved=false;l.setPointerCapture(e.pointerId);});
+      l.addEventListener("pointermove",function(e){
+        if(down){var dx=e.clientX-down.x;if(Math.abs(dx)>3){moved=true;l.dataset.drag="1";tipHide();}setYaw(stage,down.y+dx*0.35);return;}
+        var b=e.target.closest(".bar");
+        if(b){tipShow(stepTip(+b.getAttribute("data-s"),+b.getAttribute("data-i")),e.clientX,e.clientY);}else{tipHide();}
+      });
+      function up(e){if(!down){return;}var b=down.bar;down=null;
+        if(!moved&&b){tipHide();replay.go(+b.getAttribute("data-s"),+b.getAttribute("data-i"),true);}
+        moved=false;}
+      l.addEventListener("pointerup",up);l.addEventListener("pointercancel",function(){down=null;});
+      l.addEventListener("pointerleave",function(){tipHide();});
+    });
+    $$(".jpanel .seg button").forEach(function(b){b.addEventListener("click",function(){
+      var panel=b.closest(".jpanel"),mode=b.getAttribute("data-mode");
+      panel.setAttribute("data-mode",mode);$$(".seg button",panel).forEach(function(x){x.classList.toggle("on",x===b);});
+      store.set("uxprobe-journey",mode);
+      if(mode==="map"){$$(".jm-strip",panel).forEach(function(d){d.classList.add("in");});}
+      else{$$(".land",panel).forEach(function(l){l.classList.add("in");settle(l);});}
+    });});
+    var pref=store.get("uxprobe-journey");
+    if(pref==="map"){$$(".jpanel").forEach(function(p){p.setAttribute("data-mode","map");
+      $$(".seg button",p).forEach(function(x){x.classList.toggle("on",x.getAttribute("data-mode")==="map");});});}
+    return {settle:settle};
+  })();
+
   /* ---------------------------------------------------------------- replay */
   var replay=(function(){
     var root=$("#replay-app");
@@ -254,13 +298,15 @@ DASHBOARD_JS = r"""
       axis.innerHTML=ticks;
       st.built=st.s;
     }
-    function feelKey(f){return String(f||"").split(",")[0].split("/")[0].trim().toLowerCase();}
+    var VF='<span class="vf tl"></span><span class="vf tr"></span><span class="vf bl"></span><span class="vf br"></span>';
+    function noshot(){var t=$("#ic-noshot");return t?t.innerHTML:"";}
     function render(){
       var s=ses();
       if(!s){return;}
       if(st.built!==st.s){buildTimeline();buildTabs();}
       if(!s.steps.length){
-        stage.innerHTML='<div class="none"><b>No steps recorded</b>This session produced no step log'+(s.error?': '+esc(s.error)+'.':'.')+' Open the session log for what the agent said.</div>';
+        stage.classList.remove("phone");
+        stage.innerHTML=VF+'<div class="none">'+noshot()+'<b>No steps recorded</b>This session produced no step log'+(s.error?': '+esc(s.error)+'.':'.')+' Open the session log for what the agent said.</div>';
         cap.textContent="";fric.innerHTML="";side.innerHTML='<div class="rp-card"><div class="lbl">Session</div><div class="intent">'+esc(s.name)+'</div><div class="rp-kv"><div><div class="lbl">Outcome</div>'+esc(s.outcome||"unknown")+'</div><div><div class="lbl">Agent</div>'+esc(s.agent||"")+'</div></div></div>';
         pos.innerHTML="<b>0</b> / 0";url.textContent="";dev.textContent=s.device||"";
         if(openBtn){openBtn.style.display="none";}
@@ -271,12 +317,13 @@ DASHBOARD_JS = r"""
       var x=s.steps[st.i];
       var src=x.shot?(s.dir+"/"+x.shot):"";
       var feel=x.feeling?'<span class="feel">'+esc(x.feeling)+'</span>':'';
+      stage.classList.toggle("phone",/phone|tablet/i.test(s.device||""));
       if(src){
-        stage.innerHTML='<img src="'+esc(src)+'" alt="'+esc(x.action||x.intent||"screenshot")+'"><span class="tag-n">'+esc(x.n)+' / '+s.steps.length+'</span>'+feel;
+        stage.innerHTML=VF+'<img src="'+esc(src)+'" alt="'+esc(x.action||x.intent||"screenshot")+'"><span class="tag-n">'+esc(x.n)+' / '+s.steps.length+'</span>'+feel;
         url.textContent=x.shot;
         if(openBtn){openBtn.style.display="";openBtn.setAttribute("href",src);}
       }else{
-        stage.innerHTML='<div class="cross"></div><div class="none"><b>No screenshot for this step</b>'+esc(x.what||x.action||x.intent||"")+'</div><span class="tag-n">'+esc(x.n)+' / '+s.steps.length+'</span>'+feel;
+        stage.innerHTML=VF+'<div class="none">'+noshot()+'<b>No screenshot for this step</b>'+esc(x.what||x.action||x.intent||"")+'</div><span class="tag-n">'+esc(x.n)+' / '+s.steps.length+'</span>'+feel;
         url.textContent="(no screenshot)";
         if(openBtn){openBtn.style.display="none";}
       }
@@ -293,6 +340,8 @@ DASHBOARD_JS = r"""
         +'<div class="rp-thought">'+(x.thought?'<div class="q">'+esc(x.thought)+'</div>':'<div class="empty-q">No thinking-aloud note for this step.</div>')
         +'<div class="cite"><span class="ava">'+s.icon+'</span>'+esc(s.name)+(x.feeling?' <span class="badge" style="margin-left:auto">'+esc(x.feeling)+'</span>':'')+'</div></div>';
       $$(".rp-seg",tl).forEach(function(seg,i){seg.classList.toggle("on",i===st.i);seg.classList.toggle("done",i<st.i);});
+      $$(".land .bar.on, .jm-cell.on").forEach(function(b){b.classList.remove("on");});
+      $$('.land .bar[data-s="'+st.s+'"][data-i="'+st.i+'"], .jm-cell[data-s="'+st.s+'"][data-i="'+st.i+'"]').forEach(function(b){b.classList.add("on");});
       pos.innerHTML="<b>"+x.n+"</b> / "+s.steps.length;
       if(logBtn){logBtn.setAttribute("data-log",s.log);}
       var nx=s.steps[st.i+1];if(nx&&nx.shot){var im=new Image();im.src=s.dir+"/"+nx.shot;}
@@ -399,5 +448,8 @@ DASHBOARD_JS = r"""
   });
 
   route();
+  // the browser scrolls to the view's own id after load; undo that so the hero is not under the top bar
+  function top(){if(ids.indexOf((location.hash||"").replace(/^#/,"").split("/")[0])>=0){window.scrollTo(0,0);}}
+  window.addEventListener("load",function(){top();setTimeout(top,0);});
 })();
 """
