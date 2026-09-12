@@ -11,7 +11,7 @@ evidence is.
 No recruiting. No scheduling. No test plan. Just a URL.
 
 <p align="center">
-  <img src="docs/img/uxprobe-demo.gif" alt="uxprobe walkthrough: pick personas, give a task, the agent drives the site, you get a ranked fix list" width="820">
+  <img src="docs/img/uxprobe-demo.gif" alt="uxprobe walkthrough: pick personas, give a task, the agent drives the real site, then a dashboard with a journey map, a session replay and a ranked fix list" width="820">
 </p>
 
 <p align="center">
@@ -60,27 +60,38 @@ uxprobe run --url https://yoursite.com \
 
 ## What you get
 
-Every study builds one self-contained HTML dashboard. Outcomes and the headline numbers up
-top, one row per session, then every duplicate finding merged into a single ranked issue
-with its reach and evidence grade.
+Every study builds one self-contained HTML dashboard: no server, no build step, opens
+from disk. The overview leads with the headline numbers, then a **journey map** of every
+step each participant took, coloured by how much friction they hit, then a **who hit
+what** grid showing which participants met which issues and how badly each rated it.
 
 <p align="center">
-  <img src="docs/img/dashboard-overview.jpg" alt="uxprobe dashboard: headline tiles for the fix-first count, tasks completed and study cost, over a per-session table with outcomes, ease meters and blockers" width="49%">
-  <img src="docs/img/dashboard-issues.jpg" alt="A ranked, deduplicated issue list graded blocker and major, with reach and evidence tags" width="49%">
+  <img src="docs/img/dashboard-overview.jpg" alt="uxprobe dashboard overview: headline tiles, a journey map with one row per participant and one cell per step coloured by friction, outcome and severity bars, and a who-hit-what matrix" width="100%">
 </p>
+
+**Replay** any session like a video: the screenshot the participant saw at each step,
+what they were trying to do, what they expected, what they got, and the thought they had
+at that moment, with a scrubbable timeline coloured by friction. **Issues** is the ranked,
+deduplicated fix list with filters for band, severity, evidence grade and participant, a
+search box, and a one-click copy of any issue as a Markdown ticket.
+
+<p align="center">
+  <img src="docs/img/dashboard-replay.jpg" alt="Replay view: a session screenshot with step number, what the participant tried, expected and got, their thought at that moment, and a friction-coloured timeline scrubber" width="49%">
+  <img src="docs/img/dashboard-issues.jpg" alt="Issues view: a filter bar for band, severity, evidence and participant, over a ranked list of merged issues with reach, evidence grade and impact tags" width="49%">
+</p>
+
+The whole thing is keyboard-driven (press `?` for the list), has a light theme, prints
+cleanly, and degrades to a plain stacked report if JavaScript is off.
 
 Each participant drives a **real browser in character** and screenshots every meaningful
 step, so the write-up shows what they actually saw, wired to the moment that produced it.
 These four are from the shipped example study, a first run at League of Legends: the
-sign-up wall that turns out to be the only route to start, the "Play for free" button, the
-"Get set up to play" overlay a screen-reader user got stuck in, and a non-native speaker
-opening the menu to hunt for a language option.
+sign-up wall that turns out to be the only route to start, the "Play for free" button on
+a phone, the "Get set up to play" overlay a screen-reader user got stuck in, and a
+non-native speaker opening the menu to hunt for a language option.
 
 <p align="center">
-  <img src="docs/img/session-1.png" alt="First-timer: the email sign-up wall that is the only route to start playing" width="24%">
-  <img src="docs/img/session-2.png" alt="Mobile: the Play for free call to action" width="24%">
-  <img src="docs/img/session-3.png" alt="Screen reader: a Get set up to play overlay with no dialog semantics" width="24%">
-  <img src="docs/img/session-4.png" alt="Non-native speaker: opening the menu to look for a language option" width="24%">
+  <img src="docs/img/session-moments.jpg" alt="Four moments from the example study: the email sign-up wall, the Play for free button on a phone, a Get set up to play overlay with no dialog semantics, and the site menu opened on a phone" width="100%">
 </p>
 
 Everything also lands on disk as Markdown, JSON and CSV, so it drops straight into a PR, a
