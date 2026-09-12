@@ -1,0 +1,16 @@
+runs/
+*.egg-info/
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+
+# local demo / scratch artefacts, not part of the tool
+deck.html
+deck-editorial.html
+deck-instrument.html
+_shots.json
+
+# Claude Code local settings
+.claude/settings.local.json

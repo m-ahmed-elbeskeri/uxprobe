@@ -1,0 +1,62 @@
+# A ready-to-run example study against a popular, public marketing site.
+#
+#   uxprobe study example-study.yaml --echo --open
+#
+# The League of Legends site is a good demo target: it is a busy, animated
+# marketing homepage of exactly the kind teams ship, so the personas have
+# plenty to trip over (cookie walls, age gates, jargon, motion, deep menus).
+# It is browsed read-only, like any visitor. Swap base_url and tasks for your
+# own site when you are testing something you own or are authorised to test.
+name: leagueoflegends-first-run
+description: Can four different people work out what the game is and how to start?
+base_url: https://www.leagueoflegends.com/en-gb/
+
+# Which CLI agents drive the browser. Each one runs every persona x task.
+agents: [claude]
+# model: claude-opus-5          # optional, passed through to the CLI
+browser: auto                   # auto | chrome-mcp | playwright-mcp | playwright-script | none
+timeout: 900                    # seconds per session
+repeat: 1                       # bump to 2 to see how much a persona varies
+screenshots: true
+
+# Built-in ids: first-timer, power-user, mobile-commuter, screen-reader,
+# skeptical-buyer, impatient-returner, cautious-senior, distracted-multitasker,
+# edge-case-hunter, non-native-speaker.  Run `uxprobe personas` to see them all.
+personas:
+  # never played, does not know the genre or the jargon
+  - first-timer
+
+  # one-handed on a phone with patchy signal
+  - mobile-commuter
+
+  # keyboard only, screen reader, 200% zoom, on a very visual site
+  - screen-reader
+
+  # gaming idioms and abbreviations slow them down
+  - non-native-speaker
+
+tasks:
+  - id: what-is-it-and-how-to-start
+    title: Work out what the game is and how to start
+    goal: >-
+      Friends keep talking about League of Legends but you have never played.
+      Work out what kind of game it is, whether it costs anything to start, and
+      how you would actually begin playing on your computer. Note anything that
+      slows you down or puts you off.
+    starting_context: Someone sent you the link and said "just try it".
+    success_criteria:
+      - Can say in one sentence what kind of game it is
+      - Found whether it is free to start
+      - Found the path to begin (download or sign up) without completing it
+    max_steps: 22
+
+# Extra house rules on top of the built-in safety defaults (which already forbid
+# purchases, real personal data, irreversible actions and login/captcha bypass).
+guardrails:
+  - Do not create an account, sign in, or connect any social login.
+  - Do not download or install the game client, and do not run any installer.
+  - Do not buy anything (Riot Points, merch or otherwise).
+  - If an age gate asks for a date of birth, do not invent a real-looking one.
+    Describe what it asks for and stop, as a finding.
+  - Prefer the most privacy-preserving option on any cookie or consent banner.
+  - Stay on leagueoflegends.com and its own subdomains.
